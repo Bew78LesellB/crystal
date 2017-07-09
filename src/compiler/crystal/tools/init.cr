@@ -66,6 +66,7 @@ module Crystal
 
     def self.fetch_directory(args, project_name)
       directory = args.empty? ? project_name : args.shift
+      return directory if directory == "."
       if Dir.exists?(directory) || File.exists?(directory)
         puts "file or directory #{directory} already exists"
         exit 1
