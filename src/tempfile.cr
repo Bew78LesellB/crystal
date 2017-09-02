@@ -1,5 +1,3 @@
-require "c/stdlib"
-
 # The `Tempfile` class is for managing temporary files.
 # Every tempfile is operated as a `File`, including
 # initializing, reading and writing.
@@ -32,15 +30,17 @@ require "c/stdlib"
 # tempfile.unlink
 # ```
 class Tempfile < IO::FileDescriptor
+  DEFAULT_TEMPFILE_NAME = "tempfile"
+
   # Creates a `Tempfile` with the given filename.
-  def initialize(name)
-    tmpdir = self.class.dirname + File::SEPARATOR
-    @path = "#{tmpdir}#{name}.XXXXXX"
-    fileno = LibC.mkstemp(@path)
-    if fileno == -1
+  def initialize(name = DEFAULT_TEMPFILE_NAME)
+    @path = File.join(Tempfile.dirname, name) + ".XXXXXX"
+    fd = LibC.mkstemp(@path)
+    if fd == -1
       raise Errno.new("mkstemp")
     end
-    super(fileno, blocking: true)
+
+    super(fd, blocking: true)
   end
 
   # Retrieves the full path of a this tempfile.
@@ -59,8 +59,8 @@ class Tempfile < IO::FileDescriptor
   # end
   # File.read(tempfile.path) # => "bar"
   # ```
-  def self.open(filename)
-    tempfile = Tempfile.new(filename)
+  def self.open(name = DEFAULT_TEMPFILE_NAME)
+    tempfile = Tempfile.new(name)
     begin
       yield tempfile
     ensure
@@ -69,26 +69,22 @@ class Tempfile < IO::FileDescriptor
     tempfile
   end
 
+  DEFAULT_POSIX_TMPDIR = "/tmp"
+
   # Returns the tmp dir used for tempfile.
   #
   # ```
   # Tempfile.dirname # => "/tmp"
   # ```
-  def self.dirname : String
+  def self.dirname
     unless tmpdir = ENV["TMPDIR"]?
-      tmpdir = "/tmp"
+      tmpdir = DEFAULT_POSIX_TMPDIR
     end
-    tmpdir = tmpdir + File::SEPARATOR unless tmpdir.ends_with? File::SEPARATOR
-    File.dirname(tmpdir)
+    File.expand_path(tmpdir)
   end
 
   # Deletes this tempfile.
   def delete
     File.delete(@path)
-  end
-
-  # ditto
-  def unlink
-    delete
   end
 end

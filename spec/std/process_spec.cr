@@ -174,7 +174,7 @@ describe Process do
   it "executes the new process with exec" do
     tmpfile = Tempfile.new("crystal-spec-exec")
     tmpfile.close
-    tmpfile.unlink
+    tmpfile.delete
     File.exists?(tmpfile.path).should be_false
 
     fork = Process.fork do
@@ -183,7 +183,7 @@ describe Process do
     fork.wait
 
     File.exists?(tmpfile.path).should be_true
-    tmpfile.unlink
+    tmpfile.delete
   end
 
   it "checks for existence" do
