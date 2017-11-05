@@ -1893,14 +1893,9 @@ module Crystal
       pp lib_type.defs
       lib_type.defs.try &.each do |name, metadatas|
         metadatas.each do |metadata|
-          case ext = metadata.def
-          when External
-            fun_def = ext.fun_def
-          else
-            raise "BUG: "
-          end
+          external = metadata.def.as(External)
 
-          funs << fun_def
+          funs << external.fun_def
         end
       end
       ArrayLiteral.new(funs)
