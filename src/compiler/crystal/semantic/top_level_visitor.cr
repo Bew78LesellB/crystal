@@ -752,6 +752,10 @@ class Crystal::TopLevelVisitor < Crystal::SemanticVisitor
     process_def_attributes external, attributes
     node.external = external
 
+    if scope.is_a?(LibType)
+      scope.add_def external
+    end
+
     false
   end
 
