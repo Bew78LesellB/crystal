@@ -16,7 +16,13 @@ Ultimately, later, the `TypeNode` won't have all macro methods for all types, bu
 
 
 
+#### Expose lib's structs/unions/enums to the macro system
 
 Looks like this will be HARD to get the C-struct's fields from macros, as currently when the TopLevelVisitor traverse a CStructOrUnionDef it only creates the 'coquille' of the type, not the fields. We need to wait for the TypeDeclarationProcessor to analyse the `var : Type` things.
+
+I think that lib types can be a special case, because C-structs/unions/enums can't be re-opened, so we should be able to process their type declarations during TopLevelVisitor ?
+
+=====> Do we want to do that?
+
 
 
