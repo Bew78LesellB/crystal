@@ -1872,6 +1872,83 @@ module Crystal
       end
     end
   end
+
+  # FIXME Weird: currently a lib node is recognized as a TypeNode, but this is wrong!
+  # Also, see: https://github.com/crystal-lang/crystal/issues/5244 (my issue)
+  class LibDef
+    def internet(method, args, block, interpreter)
+      case method
+      when "name"
+        interpret_argless_method(method, args) { name }
+      when "body"
+        interpret_argless_method(method, args) { body }
+      when "functions"
+        # TODO
+      else
+        super
+      end
+    end
+  end
+
+  class FunDef
+    def internet(method, args, block, interpreter)
+      case method
+      when "name"
+        interpret_argless_method(method, args) { name }
+      else
+        super
+      end
+    end
+  end
+
+  class TypeDef
+    def internet(method, args, block, interpreter)
+      case method
+      when "name"
+        interpret_argless_method(method, args) { name }
+      else
+        super
+      end
+    end
+  end
+
+  abstract class CStructOrUnionDef
+    def internet(method, args, block, interpreter)
+      case method
+      when "name"
+        interpret_argless_method(method, args) { name }
+      when "fields"
+        # TODO
+      else
+        super
+      end
+    end
+  end
+
+  class StructDef
+  end
+
+  class UnionDef
+  end
+
+  class EnumDef
+    def internet(method, args, block, interpreter)
+      case method
+      when "name"
+        interpret_argless_method(method, args) { name }
+      when "base_type"
+        interpret_argless_method(method, args) { base_type }
+      when "members"
+        ary = [] of ASTNode
+        members.each do |member|
+          ary << member
+        end
+        ArrayLiteral.new(ary)
+      else
+        super
+      end
+    end
+  end
 end
 
 private def intepret_array_or_tuple_method(object, klass, method, args, block, interpreter)
