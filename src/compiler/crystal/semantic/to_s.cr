@@ -44,6 +44,11 @@ module Crystal
       false
     end
 
+    def visit(node : LibTypeNode)
+      node.type.devirtualize.to_s(@str)
+      false
+    end
+
     def visit(node : TypeRestriction)
       @str << "# type restriction: "
       node.obj.accept self

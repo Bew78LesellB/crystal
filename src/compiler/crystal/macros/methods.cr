@@ -1875,26 +1875,43 @@ module Crystal
 
   # FIXME Weird: currently a lib node is recognized as a TypeNode, but this is wrong!
   # Also, see: https://github.com/crystal-lang/crystal/issues/5244 (my issue)
-  class LibDef
-    def internet(method, args, block, interpreter)
+  #class LibDef
+  class LibTypeNode
+    def interpret(method, args, block, interpreter)
       case method
       when "name"
-        interpret_argless_method(method, args) { name }
-      when "body"
-        interpret_argless_method(method, args) { body }
+        interpret_argless_method(method, args) { MacroId.new(lib_type.name.to_s) }
       when "functions"
-        # TODO
+        interpret_argless_method(method, args) { LibTypeNode.functions(lib_type) }
       else
         super
       end
     end
+
+    def self.functions(lib_type)
+      funs = [] of ASTNode
+      pp lib_type.defs
+      lib_type.defs.try &.each do |name, metadatas|
+        metadatas.each do |metadata|
+          case ext = metadata.def
+          when External
+            fun_def = ext.fun_def
+          else
+            raise "BUG: "
+          end
+
+          funs << fun_def
+        end
+      end
+      ArrayLiteral.new(funs)
+    end
   end
 
   class FunDef
-    def internet(method, args, block, interpreter)
+    def interpret(method, args, block, interpreter)
       case method
       when "name"
-        interpret_argless_method(method, args) { name }
+        interpret_argless_method(method, args) { MacroId.new(@name.to_s) }
       else
         super
       end
@@ -1902,10 +1919,10 @@ module Crystal
   end
 
   class TypeDef
-    def internet(method, args, block, interpreter)
+    def interpret(method, args, block, interpreter)
       case method
       when "name"
-        interpret_argless_method(method, args) { name }
+        interpret_argless_method(method, args) { MacroId.new(@name.to_s) }
       else
         super
       end
@@ -1913,12 +1930,12 @@ module Crystal
   end
 
   abstract class CStructOrUnionDef
-    def internet(method, args, block, interpreter)
+    def interpret(method, args, block, interpreter)
       case method
       when "name"
-        interpret_argless_method(method, args) { name }
-      when "fields"
-        # TODO
+        interpret_argless_method(method, args) { MacroId.new(@name.to_s) }
+      # when "fields"
+      #   # TODO
       else
         super
       end
@@ -1932,18 +1949,14 @@ module Crystal
   end
 
   class EnumDef
-    def internet(method, args, block, interpreter)
+    def interpret(method, args, block, interpreter)
       case method
       when "name"
-        interpret_argless_method(method, args) { name }
+        interpret_argless_method(method, args) { MacroId.new(@name.to_s) }
       when "base_type"
-        interpret_argless_method(method, args) { base_type }
+        interpret_argless_method(method, args) { base_type || NilLiteral.new }
       when "members"
-        ary = [] of ASTNode
-        members.each do |member|
-          ary << member
-        end
-        ArrayLiteral.new(ary)
+        interpret_argless_method(method, args) { ArrayLiteral.new(members) }
       else
         super
       end

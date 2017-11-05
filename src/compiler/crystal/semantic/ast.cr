@@ -77,6 +77,24 @@ module Crystal
     def_equals_and_hash type
   end
 
+  # Fictitious node to represent a lib type
+  class LibTypeNode < ASTNode
+    getter lib_type
+
+    def initialize(@lib_type : LibType)
+    end
+
+    def to_macro_id
+      @lib_type.to_s
+    end
+
+    def clone_without_location
+      self
+    end
+
+    def_equals_and_hash lib_type
+  end
+
   # Fictitious node to represent a type restriction
   #
   # It is used for type restrection of method arguments.

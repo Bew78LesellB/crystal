@@ -401,6 +401,8 @@ module Crystal
       case matched_type
       when Const
         matched_type.value
+      when LibType
+        LibTypeNode.new(matched_type)
       when Type
         matched_type = matched_type.remove_alias
 
