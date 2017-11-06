@@ -1957,17 +1957,6 @@ module Crystal
     end
   end
 
-  class TypeDef
-    def interpret(method, args, block, interpreter)
-      case method
-      when "name"
-        interpret_argless_method(method, args) { MacroId.new(@name.to_s) }
-      else
-        super
-      end
-    end
-  end
-
   class CStructOrUnionTypeNode
     def interpret(method, args, block, interpreter)
       type = @type.as(NonGenericClassType)
