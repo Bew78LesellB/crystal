@@ -1873,9 +1873,6 @@ module Crystal
     end
   end
 
-  # FIXME Weird: currently a lib node is recognized as a TypeNode, but this is wrong!
-  # Also, see: https://github.com/crystal-lang/crystal/issues/5244 (my issue)
-  # class LibDef
   class LibTypeNode
     def interpret(method, args, block, interpreter)
       type = self.type.as(LibType)
