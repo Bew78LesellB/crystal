@@ -1884,12 +1884,12 @@ module Crystal
         interpret_argless_method(method, args) { TypeNode.constants(type) }
       when "constant"
         interpret_one_arg_method(method, args) do |arg|
-          value = arg.to_string("argument to 'TypeNode#constant'")
+          value = arg.to_string("argument to 'LibTypeNode#constant'")
           TypeNode.constant(type, value)
         end
       when "has_constant?"
         interpret_one_arg_method(method, args) do |arg|
-          value = arg.to_string("argument to 'TypeNode#has_constant?'")
+          value = arg.to_string("argument to 'LibTypeNode#has_constant?'")
           TypeNode.has_constant?(type, value)
         end
       when "functions"
