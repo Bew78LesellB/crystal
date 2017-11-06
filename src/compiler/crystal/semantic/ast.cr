@@ -77,22 +77,16 @@ module Crystal
     def_equals_and_hash type
   end
 
-  # Fictitious node to represent a lib type
-  class LibTypeNode < ASTNode
-    getter lib_type
+  # Fictitious node to represent a lib type for macros
+  class LibTypeNode < TypeNode
+  end
 
-    def initialize(@lib_type : LibType)
-    end
+  # Fictitious node to represent a C struct/union type inside a lib type for macros
+  class CStructOrUnionTypeNode < TypeNode
+  end
 
-    def to_macro_id
-      @lib_type.to_s
-    end
-
-    def clone_without_location
-      self
-    end
-
-    def_equals_and_hash lib_type
+  # Fictitious node to represent a C enum type inside a lib type for macros
+  class EnumTypeNode < TypeNode
   end
 
   # Fictitious node to represent a type restriction

@@ -1875,23 +1875,43 @@ module Crystal
 
   # FIXME Weird: currently a lib node is recognized as a TypeNode, but this is wrong!
   # Also, see: https://github.com/crystal-lang/crystal/issues/5244 (my issue)
-  #class LibDef
+  # class LibDef
   class LibTypeNode
     def interpret(method, args, block, interpreter)
+      type = self.type.as(LibType)
+
       case method
       when "name"
-        interpret_argless_method(method, args) { MacroId.new(lib_type.name.to_s) }
+        interpret_argless_method(method, args) { MacroId.new(type.name.to_s) }
+      when "constants"
+        interpret_argless_method(method, args) { TypeNode.constants(type) }
+      when "constant"
+        interpret_one_arg_method(method, args) do |arg|
+          value = arg.to_string("argument to 'TypeNode#constant'")
+          TypeNode.constant(type, value)
+        end
+      when "has_constant?"
+        interpret_one_arg_method(method, args) do |arg|
+          value = arg.to_string("argument to 'TypeNode#has_constant?'")
+          TypeNode.has_constant?(type, value)
+        end
       when "functions"
-        interpret_argless_method(method, args) { LibTypeNode.functions(lib_type) }
+        interpret_argless_method(method, args) { LibTypeNode.functions(type) }
+      when "has_function?"
+        interpret_one_arg_method(method, args) do |arg|
+          value = arg.to_string("argument to 'LibTypeNode#has_function?'")
+          LibTypeNode.has_function?(type, value)
+        end
+      when "types"
+        interpret_argless_method(method, args) { LibTypeNode.types(type) }
       else
         super
       end
     end
 
-    def self.functions(lib_type)
+    def self.functions(type)
       funs = [] of ASTNode
-      pp lib_type.defs
-      lib_type.defs.try &.each do |name, metadatas|
+      type.defs.try &.each do |name, metadatas|
         metadatas.each do |metadata|
           external = metadata.def.as(External)
 
@@ -1900,6 +1920,31 @@ module Crystal
       end
       ArrayLiteral.new(funs)
     end
+
+    def self.has_function?(type, name)
+      has_key = type.defs.try(&.has_key?(name))
+      BoolLiteral.new(!!has_key)
+    end
+
+    def self.types(type)
+      # types = [] of ASTNode
+      types = type.types.map do |_, type_in_lib|
+        # here `type_in_lib` is not an ASTNode, it's a Type
+        case type_in_lib
+        when NonGenericClassType
+          if type_in_lib.extern?
+            CStructOrUnionTypeNode.new(type_in_lib)
+          else
+            raise "Not an extern NonGenericClassType in a lib node: #{type_in_lib}"
+          end
+        when EnumType
+          EnumTypeNode.new(type_in_lib)
+        else
+          raise "Not a valid type in a lib node: #{type_in_lib.class}"
+        end
+      end
+      ArrayLiteral.map(types, &.itself)
+    end
   end
 
   class FunDef
@@ -1907,6 +1952,8 @@ module Crystal
       case method
       when "name"
         interpret_argless_method(method, args) { MacroId.new(@name.to_s) }
+      when "args"
+        interpret_argless_method(method, args) { ArrayLiteral.map @args, &.itself }
       else
         super
       end
@@ -1924,34 +1971,34 @@ module Crystal
     end
   end
 
-  abstract class CStructOrUnionDef
+  class CStructOrUnionTypeNode
     def interpret(method, args, block, interpreter)
+      type = @type.as(NonGenericClassType)
+
       case method
       when "name"
-        interpret_argless_method(method, args) { MacroId.new(@name.to_s) }
-      # when "fields"
-      #   # TODO
+        interpret_argless_method(method, args) { MacroId.new(type.name) }
+      when "union?"
+        interpret_argless_method(method, args) { BoolLiteral.new(type.extern_union?) }
+        # when "fields"
+        #   # TODO
       else
         super
       end
     end
   end
 
-  class StructDef
-  end
-
-  class UnionDef
-  end
-
-  class EnumDef
+  class EnumTypeNode
     def interpret(method, args, block, interpreter)
+      type = @type.as(EnumType)
+
       case method
       when "name"
-        interpret_argless_method(method, args) { MacroId.new(@name.to_s) }
+        interpret_argless_method(method, args) { MacroId.new(type.name) }
       when "base_type"
-        interpret_argless_method(method, args) { base_type || NilLiteral.new }
+        interpret_argless_method(method, args) { TypeNode.new(type.base_type) }
       when "members"
-        interpret_argless_method(method, args) { ArrayLiteral.new(members) }
+        interpret_argless_method(method, args) { TypeNode.constants(type) }
       else
         super
       end
