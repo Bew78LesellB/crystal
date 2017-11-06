@@ -1924,18 +1924,17 @@ module Crystal
     end
 
     def self.types(type)
-      # types = [] of ASTNode
-      types = type.types.map do |_, type_in_lib|
-        # here `type_in_lib` is not an ASTNode, it's a Type
+      types = [] of ASTNode
+      type.types.each_value do |type_in_lib|
         case type_in_lib
         when NonGenericClassType
           if type_in_lib.extern?
-            CStructOrUnionTypeNode.new(type_in_lib)
+            types << CStructOrUnionTypeNode.new(type_in_lib)
           else
             raise "Not an extern NonGenericClassType in a lib node: #{type_in_lib}"
           end
         when EnumType
-          EnumTypeNode.new(type_in_lib)
+          types << EnumTypeNode.new(type_in_lib)
         else
           raise "Not a valid type in a lib node: #{type_in_lib.class}"
         end
