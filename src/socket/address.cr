@@ -197,7 +197,6 @@ class Socket
   # ```
   struct UNIXAddress < Address
     getter path : String
-    getter? abstract : Bool
 
     # :nodoc:
     MAX_PATH_SIZE = LibC::SockaddrUn.new.sun_path.size - 1
@@ -207,18 +206,29 @@ class Socket
         raise ArgumentError.new("Path size exceeds the maximum size of #{MAX_PATH_SIZE} bytes")
       end
 
-      if path.starts_with?('@')
-        {% if flag?(:linux) %}
-          @abstract = true
-          @path = path[1..-1]
-        {% else %}
-          raise ArgumentError.new("Unsupported: cannot use abstract UNIX socket on non-Linux")
-        {% end %}
-      else
-        @abstract = false
-        @path = path
-      end
+      {% if flag?(:linux) %}
+        if path.starts_with?('@')
+          path = path.sub(0, '\0')
+        end
+      {% end %}
 
+      {% unless flag?(:linux) %}
+        if path.starts_with?('\0')
+          raise ArgumentError.new("Unsupported: cannot use abstract UNIX socket on non-Linux")
+        end
+      {% end %}
+
+      @path = path
+      @family = Family::UNIX
+      @size = sizeof(LibC::SockaddrUn)
+    end
+
+    def self.new_unknown(abstract is_abstract = false)
+      new(abstract: is_abstract)
+    end
+
+    private def initialize(*, @abstract)
+      @path = ""
       @family = Family::UNIX
       @size = sizeof(LibC::SockaddrUn)
     end
@@ -234,17 +244,27 @@ class Socket
       path = sockaddr.value.sun_path
       if path[0]? == 0_u8
         {% if flag?(:linux) %}
-          @abstract = true
-          @path = String.new(path.to_unsafe + 1)
+          @path = String.new(path.to_unsafe, bytesize: path.index(0_u8, offset: 1).not_nil!)
         {% else %}
           raise ArgumentError.new("Unsupported: cannot use abstract UNIX socket on non-Linux")
         {% end %}
       else
-        @abstract = false
         @path = String.new(path.to_unsafe)
       end
 
       @size = size || sizeof(LibC::SockaddrUn)
+    end
+
+    {% if flag?(:linux) %}
+      @abstract : Bool?
+    {% end %}
+
+    def abstract?
+      {% if flag?(:linux) %}
+        @abstract ||= path.starts_with?('\0')
+      {% else %}
+        false
+      {% end %}
     end
 
     def ==(other : UNIXAddress)
@@ -254,8 +274,10 @@ class Socket
     def to_s(io)
       if abstract?
         io << '@'
+        io << path[1..-1]
+      else
+        io << path
       end
-      io << path
     end
 
     def to_unsafe : LibC::Sockaddr*
@@ -263,10 +285,6 @@ class Socket
       sockaddr.value.sun_family = family
 
       destination = sockaddr.value.sun_path.to_slice
-      if @abstract
-        destination[0] = 0_u8
-        destination += 1
-      end
       destination.copy_from(@path.to_unsafe, @path.bytesize)
       destination[@path.bytesize] = 0_u8
 

@@ -35,9 +35,8 @@ class UNIXServer < UNIXSocket
   def initialize(path : String, type : Type = Type::STREAM, backlog = 128)
     super(Family::UNIX, type)
 
-    addr = UNIXAddress.new(path)
+    addr = @addr = UNIXAddress.new(path)
     @abstract = addr.abstract?
-    @path = addr.path
     bind(addr) do |error|
       close(delete: false)
       raise error
@@ -78,9 +77,9 @@ class UNIXServer < UNIXSocket
   def close(delete = true)
     super()
   ensure
-    if !abstract? && delete && (path = @path)
+    if !abstract? && delete && (path = self.path)
       File.delete(path) if File.exists?(path)
     end
-    @path = nil
+    @addr = nil
   end
 end

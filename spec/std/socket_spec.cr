@@ -174,7 +174,7 @@ describe Socket::UNIXAddress do
       path = "/abstract.sock"
       addr = Socket::UNIXAddress.new('@' + path)
       addr.abstract?.should be_true
-      addr.path.should eq(path)
+      addr.path.should eq('\0' + path)
     end
   {% else %}
     it "raises for abstract UNIX address on non-Linux" do
@@ -217,7 +217,7 @@ describe Socket::UNIXAddress do
       path = "/abstract-service.sock"
 
       addr1 = Socket::UNIXAddress.new('@' + path)
-      addr1.path.should eq(path)
+      addr1.path.should eq('\0' + path)
       addr1.abstract?.should be_true
 
       sockaddr_un = addr1.to_unsafe.as(LibC::SockaddrUn*).value
@@ -242,6 +242,7 @@ describe Socket::UNIXAddress do
   {% if flag?(:linux) %}
     it "to_s for abstract UNIX address" do
       Socket::UNIXAddress.new("@some_path").to_s.should eq("@some_path")
+      Socket::UNIXAddress.new("\0some_path").to_s.should eq("@some_path")
     end
   {% end %}
 end
@@ -490,11 +491,11 @@ describe UNIXSocket do
 
       UNIXServer.open(abstract_path) do |server|
         server.local_address.abstract?.should be_true
-        server.local_address.path.should eq(path)
+        server.local_address.path.should eq('\0' + path)
 
         UNIXSocket.open(abstract_path) do |client|
           client.local_address.abstract?.should be_true
-          client.local_address.path.should eq(path)
+          client.local_address.path.should eq('\0' + path)
 
           server.accept do |sock|
             sock.local_address.path.should eq("")

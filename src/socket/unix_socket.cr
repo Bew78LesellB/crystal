@@ -12,16 +12,15 @@
 # sock.close
 # ```
 class UNIXSocket < Socket
-  getter path : String?
+  @addr : UNIXAddress?
   getter? abstract : Bool
 
   # Connects a named UNIX socket, bound to a path.
   def initialize(path : String, type : Type = Type::STREAM)
     super(Family::UNIX, type, Protocol::IP)
 
-    addr = UNIXAddress.new(path)
+    addr = @addr = UNIXAddress.new(path)
     @abstract = addr.abstract?
-    @path = addr.path
     connect(addr) do |error|
       close
       raise error
@@ -92,19 +91,27 @@ class UNIXSocket < Socket
     end
   end
 
+  def path
+    @addr.try &.path
+  end
+
   def local_address
-    if abstract?
-      UNIXAddress.new('@' + @path.to_s)
+    if addr = @addr
+      addr
     else
-      UNIXAddress.new(@path.to_s)
+      # FIXME: what to do when the UNIXSocket has been created from an fd?
+      #        we don't have its path (is there a way to get it?).
+      UNIXAddress.new_unknown(abstract?)
     end
   end
 
   def remote_address
-    if abstract?
-      UNIXAddress.new('@' + @path.to_s)
+    if addr = @addr
+      addr
     else
-      UNIXAddress.new(@path.to_s)
+      # FIXME: what to do when the UNIXSocket has been created from an fd?
+      #        we don't have its path (is there a way to get it?).
+      UNIXAddress.new_unknown(abstract?)
     end
   end
 
