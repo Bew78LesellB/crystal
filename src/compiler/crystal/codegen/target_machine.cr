@@ -21,6 +21,8 @@ module Crystal
         if cpu.empty? && !features.includes?("fp") && target_triple =~ /-gnueabihf/
           features += "+vfp2"
         end
+      when /^avr/
+        # LLVM.init_avr
       else
         raise TargetMachine::Error.new("Unsupported architecture for target triple: #{target_triple}")
       end
