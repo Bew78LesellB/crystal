@@ -3,7 +3,7 @@ require "./ast"
 require "./lexer"
 
 module Crystal
-  class Parser < Lexer
+  class Parser
     record Unclosed, name : String, location : Location
 
     property visibility : Visibility?
@@ -12,12 +12,17 @@ module Crystal
     getter? wants_doc : Bool
     @block_arg_name : String?
 
+    @lexer : Lexer
+    getter token : Token
+
     def self.parse(str, string_pool : StringPool? = nil, def_vars = [Set(String).new]) : ASTNode
       new(str, string_pool, def_vars).parse
     end
 
     def initialize(str, string_pool : StringPool? = nil, @def_vars = [Set(String).new])
-      super(str, string_pool)
+      @lexer = Lexer.new str, string_pool
+      @token = @lexer.token
+
       @temp_token = Token.new
       @unclosed_stack = [] of Unclosed
       @calls_super = false
@@ -63,6 +68,76 @@ module Crystal
       @stop_on_do = false
       @assigned_vars = [] of String
     end
+
+    #--------------------------------------------------------------
+    # Delegate to lexer
+
+    macro delegate_no_arg(*methods, to)
+      {% for method in methods %}
+        def {{ method }}
+          maybe_token = {{ to }}.{{ method }}
+          @token = @lexer.token
+          maybe_token
+        end
+      {% end %}
+    end
+
+    macro delegate_with_args(*methods, to)
+      {% for method in methods %}
+        def {{ method }}(*args, **kwargs)
+          maybe_token = {{ to }}.{{ method }}(*args, **kwargs)
+          @token = @lexer.token
+          maybe_token
+        end
+      {% end %}
+    end
+
+    delegate_no_arg filename,
+      next_token,
+      next_token_skip_space,
+      next_token_skip_space_or_newline,
+      next_token_skip_statement_end,
+      next_char,
+      next_char_no_column_increment,
+      next_string_array_token,
+      peek_next_char,
+      skip_space,
+      skip_space_or_newline,
+      skip_statement_end,
+      current_pos,
+      current_char,
+      slash_is_regex!,
+      slash_is_not_regex!,
+      token_end_location,
+      line_number,
+      column_number,
+      to: @lexer
+
+    delegate_with_args next_string_token,
+      next_macro_token,
+      to: @lexer
+
+    def filename=(filename)
+      @lexer.filename = filename
+    end
+
+    def current_pos=(pos)
+      @lexer.current_pos = pos
+    end
+
+    def line_number=(pos)
+      @lexer.line_number = pos
+    end
+
+    def column_number=(pos)
+      @lexer.column_number = pos
+    end
+
+    def raise(*args)
+      @lexer.raise *args
+    end
+
+    #--------------------------------------------------------------
 
     def wants_doc=(wants_doc)
       @wants_doc = !!wants_doc
@@ -289,7 +364,7 @@ module Crystal
 
     def parse_expression_suffix(location)
       slash_is_regex!
-      next_token_skip_statement_end
+      @lexer.next_token_skip_statement_end
       exp = parse_op_assign_no_control
       (yield exp).at(location).at_end(exp)
     end
@@ -573,11 +648,11 @@ module Crystal
           end
 
           # Allow '.' after newline for chaining calls
-          old_pos, old_line, old_column = current_pos, @line_number, @column_number
+          old_pos, old_line, old_column = current_pos, self.line_number, self.column_number
           @temp_token.copy_from @token
           next_token_skip_space_or_newline
           unless @token.type == :"."
-            self.current_pos, @line_number, @column_number = old_pos, old_line, old_column
+            self.current_pos, self.line_number, self.column_number = old_pos, old_line, old_column
             @token.copy_from @temp_token
             break
           end
@@ -884,20 +959,20 @@ module Crystal
         location = @token.location
         var = Var.new(@token.to_s).at(location)
 
-        old_pos, old_line, old_column = current_pos, @line_number, @column_number
+        old_pos, old_line, old_column = current_pos, self.line_number, self.column_number
         @temp_token.copy_from(@token)
 
         next_token_skip_space
 
         if @token.type == :"="
           @token.copy_from(@temp_token)
-          self.current_pos, @line_number, @column_number = old_pos, old_line, old_column
+          self.current_pos, self.line_number, self.column_number = old_pos, old_line, old_column
 
           push_var var
           node_and_next_token var
         else
           @token.copy_from(@temp_token)
-          self.current_pos, @line_number, @column_number = old_pos, old_line, old_column
+          self.current_pos, self.line_number, self.column_number = old_pos, old_line, old_column
 
           node_and_next_token Global.new(var.name).at(location)
         end
@@ -1218,7 +1293,7 @@ module Crystal
 
     def parse_begin
       slash_is_regex!
-      next_token_skip_statement_end
+      @lexer.next_token_skip_statement_end
       exps = parse_expressions
       node, end_location = parse_exception_handler exps
       node.end_location = end_location
@@ -1263,14 +1338,14 @@ module Crystal
         end
 
         begin_location ||= @token.location
-        next_token_skip_statement_end
+        @lexer.next_token_skip_statement_end
         a_else = parse_expressions
         skip_statement_end
       end
 
       if @token.keyword?(:ensure)
         begin_location ||= @token.location
-        next_token_skip_statement_end
+        @lexer.next_token_skip_statement_end
         a_ensure = parse_expressions
         skip_statement_end
       end
@@ -1665,12 +1740,12 @@ module Crystal
       end_location = nil
 
       if @token.keyword?(:do)
-        next_token_skip_statement_end
+        @lexer.next_token_skip_statement_end
         check_not_pipe_before_proc_literal_body
         body = parse_expressions
         body, end_location = parse_exception_handler body, implicit: true
       elsif @token.type == :"{"
-        next_token_skip_statement_end
+        @lexer.next_token_skip_statement_end
         check_not_pipe_before_proc_literal_body
         body = preserve_stop_on_do { parse_expressions }
         end_location = token_end_location
@@ -1801,7 +1876,7 @@ module Crystal
           raise "heredoc cannot be used inside interpolation", location
         end
         node = StringInterpolation.new([] of ASTNode).at(location)
-        @heredocs << {delimiter_state, node}
+        @lexer.heredocs << {delimiter_state, node}
         next_token
         return node
       end
@@ -1956,8 +2031,8 @@ module Crystal
 
     def consume_heredocs
       @consuming_heredocs = true
-      @heredocs.reverse!
-      while heredoc = @heredocs.pop?
+      (heredocs = @lexer.heredocs).reverse!
+      while heredoc = heredocs.pop?
         consume_heredoc(heredoc[0], heredoc[1].as(StringInterpolation))
       end
       @consuming_heredocs = false
@@ -2119,7 +2194,7 @@ module Crystal
     end
 
     def parse_empty_array_literal
-      line = @line_number
+      line = self.line_number
       column = @token.column_number
 
       next_token_skip_space
@@ -2175,7 +2250,7 @@ module Crystal
 
     def parse_hash_or_tuple_literal(allow_of = true)
       location = @token.location
-      line = @line_number
+      line = self.line_number
       column = @token.column_number
 
       slash_is_regex!
@@ -2230,7 +2305,7 @@ module Crystal
     end
 
     def parse_hash_literal(first_key, location, allow_of)
-      line = @line_number
+      line = self.line_number
       column = @token.column_number
       end_location = nil
 
@@ -2496,7 +2571,7 @@ module Crystal
             if whens.size == 0
               unexpected_token @token.to_s, "expecting when"
             end
-            next_token_skip_statement_end
+            @lexer.next_token_skip_statement_end
             a_else = parse_expressions
             skip_statement_end
             check_ident :end
@@ -2630,7 +2705,7 @@ module Crystal
               unexpected_token @token.to_s, "expecting when"
             end
             slash_is_regex!
-            next_token_skip_statement_end
+            @lexer.next_token_skip_statement_end
             a_else = parse_expressions
             skip_statement_end
             check_ident :end
@@ -2977,7 +3052,7 @@ module Crystal
     def parse_percent_macro_control
       raise "can't nest macro expressions", @token if @in_macro_expression
 
-      macro_control = parse_macro_control(@line_number, @column_number)
+      macro_control = parse_macro_control(self.line_number, self.column_number)
       if macro_control
         check :"%}"
         next_token_skip_space
@@ -3670,7 +3745,7 @@ module Crystal
       if @token.type == :IDENT
         case @token.value
         when :else
-          next_token_skip_statement_end
+          @lexer.next_token_skip_statement_end
           a_else = parse_expressions
         when :elsif
           a_else = parse_if check_end: false
@@ -3697,7 +3772,7 @@ module Crystal
 
       a_else = nil
       if @token.keyword?(:else)
-        next_token_skip_statement_end
+        @lexer.next_token_skip_statement_end
         a_else = parse_expressions
       end
 
@@ -3972,7 +4047,7 @@ module Crystal
 
           arg_index += 1
         end
-        next_token_skip_statement_end
+        @lexer.next_token_skip_statement_end
       else
         skip_statement_end
       end
@@ -4692,7 +4767,7 @@ module Crystal
     end
 
     def next_comes_type_or_int(allow_int = true)
-      old_pos, old_line, old_column = current_pos, @line_number, @column_number
+      old_pos, old_line, old_column = current_pos, self.line_number, self.column_number
 
       @temp_token.copy_from(@token)
 
@@ -4738,7 +4813,7 @@ module Crystal
         false
       ensure
         @token.copy_from(@temp_token)
-        self.current_pos, @line_number, @column_number = old_pos, old_line, old_column
+        self.current_pos, self.line_number, self.column_number = old_pos, old_line, old_column
       end
     end
 
@@ -4962,7 +5037,7 @@ module Crystal
 
       name = check_const
       name_column_number = @token.column_number
-      next_token_skip_statement_end
+      @lexer.next_token_skip_statement_end
 
       body = push_visbility { parse_lib_body_expressions }
 
@@ -4974,7 +5049,7 @@ module Crystal
     end
 
     def parse_lib_body
-      next_token_skip_statement_end
+      @lexer.next_token_skip_statement_end
       Expressions.from(parse_lib_body_expressions)
     end
 
@@ -5130,7 +5205,7 @@ module Crystal
             break
           end
         end
-        next_token_skip_statement_end
+        @lexer.next_token_skip_statement_end
       end
 
       if @token.type == :":"
@@ -5242,7 +5317,7 @@ module Crystal
       location = @token.location
       next_token_skip_space_or_newline
       name = check_const
-      next_token_skip_statement_end
+      @lexer.next_token_skip_statement_end
       body = parse_c_struct_or_union_body_expressions
       check_ident :end
       end_location = token_end_location
@@ -5252,7 +5327,7 @@ module Crystal
     end
 
     def parse_c_struct_or_union_body
-      next_token_skip_statement_end
+      @lexer.next_token_skip_statement_end
       Expressions.from(parse_c_struct_or_union_body_expressions)
     end
 
@@ -5348,7 +5423,7 @@ module Crystal
     end
 
     def parse_enum_body
-      next_token_skip_statement_end
+      @lexer.next_token_skip_statement_end
       Expressions.from(parse_enum_body_expressions)
     end
 
@@ -5366,7 +5441,7 @@ module Crystal
             next_token_skip_space_or_newline
 
             constant_value = parse_logical_or
-            next_token_skip_statement_end
+            @lexer.next_token_skip_statement_end
           else
             constant_value = nil
             skip_statement_end
@@ -5374,7 +5449,7 @@ module Crystal
 
           case @token.type
           when :",", :";"
-            next_token_skip_statement_end
+            @lexer.next_token_skip_statement_end
           end
 
           arg = Arg.new(constant_name, constant_value).at(location).at_end(constant_value || location)
@@ -5601,9 +5676,9 @@ module Crystal
     end
 
     def next_token
-      token = super
+      token = previous_def
 
-      if token.type == :NEWLINE && !@consuming_heredocs && !@heredocs.empty?
+      if token.type == :NEWLINE && !@consuming_heredocs && !@lexer.heredocs.empty?
         consume_heredocs
       end
 
