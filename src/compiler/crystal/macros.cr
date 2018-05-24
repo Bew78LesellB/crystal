@@ -151,6 +151,11 @@ module Crystal::Macros
     def id : MacroId
     end
 
+    # Returns this node as a `MacroId`, with original node's location.
+    # This allows better error message.
+    def with_location : MacroId
+    end
+
     # Returns a `StringLiteral` that contains this node's textual representation.
     # Note that invoking stringify on a string literal will return a `StringLiteral`
     # that contains a string literal.

@@ -319,6 +319,12 @@ module Crystal
           column_number = end_location.try &.original_location.try &.column_number
           column_number ? NumberLiteral.new(column_number) : NilLiteral.new
         end
+      when "with_location"
+        interpret_argless_method("with_location", args) do
+          MacroId.new(String.build do |str|
+            to_s(str, emit_loc_pragma: true)
+          end)
+        end
       when "=="
         interpret_one_arg_method(method, args) do |arg|
           BoolLiteral.new(self == arg)
