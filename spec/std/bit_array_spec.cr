@@ -230,6 +230,22 @@ describe "BitArray" do
     ary[3].should be_false
   end
 
+  it "toggles a range of bits" do
+    ary = BitArray.new(32)
+    # single-UInt32 toggle
+
+    ary[3].should be_false
+
+    ary.toggle(3)
+    ary[3].should be_true
+
+    ary.toggle(3)
+    ary[3].should be_false
+
+    ary = BitArray.new(100)
+    # multi-UInt32 toggle
+  end
+
   it "inverts all bits" do
     ary = BitArray.new(100)
     ary.none?.should be_true

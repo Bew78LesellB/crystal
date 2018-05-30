@@ -185,6 +185,31 @@ struct BitArray
     @bits[bit_index] ^= 1 << sub_index
   end
 
+  def toggle(range : Range(Int, Int))
+    toggle(*Indexable.range_to_index_and_count(range, size))
+  end
+
+  def toggle(start : Int, count : Int)
+    # FIXME: possible errors (negative values, etc..)
+
+    toggle(start, start + count - 1)
+  end
+
+  def toggle(from from_index, to to_index)
+    # FIXME: possible errors (negative values, etc..)
+
+    from_bit_index, from_sub_index = bit_index_and_sub_index(from_index)
+    to_bit_index, to_sub_index = bit_index_and_sub_index(to_index)
+
+    if from_bit_index == to_bit_index
+      from_sub_index.upto(to_sub_index) do |sub_index|
+        @bits[from_bit_index] ^= 1 << sub_index
+      end
+    else
+      # finish first UInt32
+    end
+  end
+
   # Inverts all bits in the array. Falses become `true` and vice versa.
   #
   # ```
