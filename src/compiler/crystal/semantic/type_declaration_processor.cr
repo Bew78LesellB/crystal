@@ -537,8 +537,9 @@ struct Crystal::TypeDeclarationProcessor
     end
 
     owner.ancestors.any? do |ancestor|
-      ancestor = uninstantiate(ancestor)
-      @instance_vars_outside[ancestor]?.try &.includes?(name)
+      if ancestor = uninstantiate(ancestor)
+        @instance_vars_outside[ancestor]?.try &.includes?(name)
+      end
     end
   end
 
@@ -546,8 +547,9 @@ struct Crystal::TypeDeclarationProcessor
     non_nilable_outisde = nil
     non_nilable_outisde = compute_non_nilable_outside_single(owner, non_nilable_outisde)
     owner.ancestors.each do |ancestor|
-      ancestor = uninstantiate(ancestor)
-      non_nilable_outisde = compute_non_nilable_outside_single(ancestor, non_nilable_outisde)
+      if ancestor = uninstantiate(ancestor)
+        non_nilable_outisde = compute_non_nilable_outside_single(ancestor, non_nilable_outisde)
+      end
     end
     non_nilable_outisde
   end
@@ -569,9 +571,10 @@ struct Crystal::TypeDeclarationProcessor
     return infos if infos && !infos.empty?
 
     owner.ancestors.each do |ancestor|
-      ancestor = uninstantiate(ancestor)
-      infos = @initialize_infos[ancestor]?
-      return infos if infos && !infos.empty?
+      if ancestor = uninstantiate(ancestor)
+        infos = @initialize_infos[ancestor]?
+        return infos if infos && !infos.empty?
+      end
     end
 
     nil
@@ -713,11 +716,43 @@ struct Crystal::TypeDeclarationProcessor
     end
   end
 
-  private def uninstantiate(type)
+  private def before_uninstantiate(type, line)
+    puts "======== BEFORE uninstantiate"
+    pp! typeof(type), type.class, line
     if type.is_a?(GenericInstanceType)
+      puts "=> GenericInstanceType"
+    end
+
+    if type.is_a?(GenericClassType) || type.is_a?(GenericModuleType)
+      puts "=> GenericClassType || GenericModuleType"
+    end
+  end
+
+  private def after_uninstantiate(type, line)
+    puts "======== AFTER uninstantiate"
+    pp! typeof(type), type.class, line
+    if type.is_a?(GenericInstanceType)
+      puts "=> GenericInstanceType"
+    end
+
+    if type.is_a?(GenericClassType) || type.is_a?(GenericModuleType)
+      puts "=> GenericClassType || GenericModuleType"
+    end
+    puts
+  end
+
+
+  # private def uninstantiate(type : Crystal::Type?)
+  private def uninstantiate(type, line = __LINE__)
+    before_uninstantiate(type, line)
+
+    res = if type.is_a?(GenericInstanceType)
       type.generic_type
     else
       type
     end
+
+    after_uninstantiate(res, line)
+    res
   end
 end
