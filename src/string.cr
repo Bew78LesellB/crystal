@@ -354,7 +354,7 @@ class String
 
   # Same as `#to_i` but returns an `Int8` or the block's value.
   def to_i8(base : Int = 10, whitespace = true, underscore = false, prefix = false, strict = true, &block)
-    gen_to_ i8, 127, 128
+    to_slice.to_i8(base, whitespace, underscore, prefix, strict) { yield }
   end
 
   # Same as `#to_i` but returns an `UInt8`.
@@ -369,7 +369,7 @@ class String
 
   # Same as `#to_i` but returns an `UInt8` or the block's value.
   def to_u8(base : Int = 10, whitespace = true, underscore = false, prefix = false, strict = true, &block)
-    gen_to_ u8, 255
+    to_slice.to_u8(base, whitespace, underscore, prefix, strict) { yield }
   end
 
   # Same as `#to_i` but returns an `Int16`.
@@ -384,7 +384,7 @@ class String
 
   # Same as `#to_i` but returns an `Int16` or the block's value.
   def to_i16(base : Int = 10, whitespace = true, underscore = false, prefix = false, strict = true, &block)
-    gen_to_ i16, 32767, 32768
+    to_slice.to_i16(base, whitespace, underscore, prefix, strict) { yield }
   end
 
   # Same as `#to_i` but returns an `UInt16`.
@@ -399,7 +399,7 @@ class String
 
   # Same as `#to_i` but returns an `UInt16` or the block's value.
   def to_u16(base : Int = 10, whitespace = true, underscore = false, prefix = false, strict = true, &block)
-    gen_to_ u16, 65535
+    to_slice.to_u16(base, whitespace, underscore, prefix, strict) { yield }
   end
 
   # Same as `#to_i`.
@@ -414,7 +414,7 @@ class String
 
   # Same as `#to_i`.
   def to_i32(base : Int = 10, whitespace = true, underscore = false, prefix = false, strict = true, &block)
-    gen_to_ i32, 2147483647, 2147483648
+    to_slice.to_i32(base, whitespace, underscore, prefix, strict) { yield }
   end
 
   # Same as `#to_i` but returns an `UInt32`.
@@ -429,7 +429,7 @@ class String
 
   # Same as `#to_i` but returns an `UInt32` or the block's value.
   def to_u32(base : Int = 10, whitespace = true, underscore = false, prefix = false, strict = true, &block)
-    gen_to_ u32, 4294967295
+    to_slice.to_u32(base, whitespace, underscore, prefix, strict) { yield }
   end
 
   # Same as `#to_i` but returns an `Int64`.
@@ -444,7 +444,7 @@ class String
 
   # Same as `#to_i` but returns an `Int64` or the block's value.
   def to_i64(base : Int = 10, whitespace = true, underscore = false, prefix = false, strict = true, &block)
-    gen_to_ i64, 9223372036854775807, 9223372036854775808
+    to_slice.to_i64(base, whitespace, underscore, prefix, strict) { yield }
   end
 
   # Same as `#to_i` but returns an `UInt64`.
@@ -459,156 +459,7 @@ class String
 
   # Same as `#to_i` but returns an `UInt64` or the block's value.
   def to_u64(base : Int = 10, whitespace = true, underscore = false, prefix = false, strict = true, &block)
-    gen_to_ u64
-  end
-
-  # :nodoc:
-  CHAR_TO_DIGIT = begin
-    table = StaticArray(Int8, 256).new(-1_i8)
-    10_i8.times do |i|
-      table.to_unsafe[48 + i] = i
-    end
-    26_i8.times do |i|
-      table.to_unsafe[65 + i] = i + 10
-      table.to_unsafe[97 + i] = i + 10
-    end
-    table
-  end
-
-  # :nodoc:
-  CHAR_TO_DIGIT62 = begin
-    table = CHAR_TO_DIGIT.clone
-    26_i8.times do |i|
-      table.to_unsafe[65 + i] = i + 36
-    end
-    table
-  end
-
-  # :nodoc:
-  record ToU64Info,
-    value : UInt64,
-    negative : Bool,
-    invalid : Bool
-
-  private macro gen_to_(method, max_positive = nil, max_negative = nil)
-    info = to_u64_info(base, whitespace, underscore, prefix, strict)
-    return yield if info.invalid
-
-    if info.negative
-      {% if max_negative %}
-        return yield if info.value > {{max_negative}}
-        -info.value.to_{{method}}
-      {% else %}
-        return yield
-      {% end %}
-    else
-      {% if max_positive %}
-        return yield if info.value > {{max_positive}}
-      {% end %}
-      info.value.to_{{method}}
-    end
-  end
-
-  private def to_u64_info(base, whitespace, underscore, prefix, strict)
-    raise ArgumentError.new("Invalid base #{base}") unless 2 <= base <= 36 || base == 62
-
-    ptr = to_unsafe
-
-    # Skip leading whitespace
-    if whitespace
-      while ptr.value.unsafe_chr.ascii_whitespace?
-        ptr += 1
-      end
-    end
-
-    negative = false
-    found_digit = false
-    mul_overflow = ~0_u64 / base
-
-    # Check + and -
-    case ptr.value.unsafe_chr
-    when '+'
-      ptr += 1
-    when '-'
-      negative = true
-      ptr += 1
-    end
-
-    # Check leading zero
-    if ptr.value.unsafe_chr == '0'
-      ptr += 1
-
-      if prefix
-        case ptr.value.unsafe_chr
-        when 'b'
-          base = 2
-          ptr += 1
-        when 'x'
-          base = 16
-          ptr += 1
-        else
-          base = 8
-        end
-        found_digit = false
-      else
-        found_digit = true
-      end
-    end
-
-    value = 0_u64
-    last_is_underscore = true
-    invalid = false
-
-    digits = (base == 62 ? CHAR_TO_DIGIT62 : CHAR_TO_DIGIT).to_unsafe
-    while ptr.value != 0
-      if ptr.value.unsafe_chr == '_' && underscore
-        break if last_is_underscore
-        last_is_underscore = true
-        ptr += 1
-        next
-      end
-
-      last_is_underscore = false
-      digit = digits[ptr.value]
-      if digit == -1 || digit >= base
-        break
-      end
-
-      if value > mul_overflow
-        invalid = true
-        break
-      end
-
-      value *= base
-
-      old = value
-      value += digit
-      if value < old
-        invalid = true
-        break
-      end
-
-      found_digit = true
-      ptr += 1
-    end
-
-    if found_digit
-      unless ptr.value == 0
-        if whitespace
-          while ptr.value.unsafe_chr.ascii_whitespace?
-            ptr += 1
-          end
-        end
-
-        if strict && ptr.value != 0
-          invalid = true
-        end
-      end
-    else
-      invalid = true
-    end
-
-    ToU64Info.new value, negative, invalid
+    to_slice.to_u64(base, whitespace, underscore, prefix, strict) { yield }
   end
 
   # Returns the result of interpreting characters in this string as a floating point number (`Float64`).
@@ -654,10 +505,7 @@ class String
 
   # Same as `#to_f?` but returns a Float32.
   def to_f32?(whitespace = true, strict = true)
-    to_f_impl(whitespace: whitespace, strict: strict) do
-      v = LibC.strtof self, out endptr
-      {v, endptr}
-    end
+    to_slice.to_f32?(whitespace: whitespace, strict: strict)
   end
 
   # Same as `#to_f`.
@@ -667,39 +515,7 @@ class String
 
   # Same as `#to_f?`.
   def to_f64?(whitespace = true, strict = true)
-    to_f_impl(whitespace: whitespace, strict: strict) do
-      v = LibC.strtod self, out endptr
-      {v, endptr}
-    end
-  end
-
-  private def to_f_impl(whitespace = true, strict = true)
-    return unless whitespace || '0' <= self[0] <= '9' || self[0] == '-' || self[0] == '+'
-
-    v, endptr = yield
-    string_end = to_unsafe + bytesize
-
-    # blank string
-    return if endptr == to_unsafe
-
-    if strict
-      if whitespace
-        while endptr < string_end && endptr.value.chr.ascii_whitespace?
-          endptr += 1
-        end
-      end
-      # reached the end of the string
-      v if endptr == string_end
-    else
-      ptr = to_unsafe
-      if whitespace
-        while ptr < string_end && ptr.value.chr.ascii_whitespace?
-          ptr += 1
-        end
-      end
-      # consumed some bytes
-      v if endptr > ptr
-    end
+    to_slice.to_f64?(whitespace: whitespace, strict: strict)
   end
 
   # Returns the `Char` at the given *index*, or raises `IndexError` if out of bounds.
