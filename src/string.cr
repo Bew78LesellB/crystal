@@ -2951,29 +2951,6 @@ class String
     !!index(search)
   end
 
-  # Makes an array by splitting the string on any amount of ASCII whitespace
-  # characters (and removing that whitespace).
-  #
-  # If *limit* is present, up to *limit* new strings will be created, with the
-  # entire remainder added to the last string.
-  #
-  # ```
-  # old_pond = "
-  #   Old pond
-  #   a frog leaps in
-  #   water's sound
-  # "
-  # old_pond.split    # => ["Old", "pond", "a", "frog", "leaps", "in", "water's", "sound"]
-  # old_pond.split(3) # => ["Old", "pond", "a frog leaps in\n  water's sound\n"]
-  # ```
-  def split(limit : Int32? = nil)
-    ary = Array(String).new
-    split(limit) do |string|
-      ary << string
-    end
-    ary
-  end
-
   # Splits the string after any amount of ASCII whitespace characters and yields
   # each non-whitespace part to a block.
   #
@@ -2988,14 +2965,14 @@ class String
   #   water's sound
   # "
   #
-  # old_pond.split { |s| ary << s }
+  # old_pond.each_split { |s| ary << s }
   # ary # => ["Old", "pond", "a", "frog", "leaps", "in", "water's", "sound"]
   # ary.clear
   #
-  # old_pond.split(3) { |s| ary << s }
+  # old_pond.each_split(3) { |s| ary << s }
   # ary # => ["Old", "pond", "a frog leaps in\n  water's sound\n"]
   # ```
-  def split(limit : Int32? = nil, &block : String -> _)
+  def each_split(limit : Int32? = nil, &block : String -> _)
     if limit && limit <= 1
       yield self
       return
@@ -3047,26 +3024,36 @@ class String
     end
   end
 
-  # Makes an `Array` by splitting the string on the given character *separator*
-  # (and removing that character).
-  #
-  # If *limit* is present, up to *limit* new strings will be created,
-  # with the entire remainder added to the last string.
-  #
-  # If *remove_empty* is `true`, any empty strings are removed from the result.
-  #
-  # ```
-  # "foo,,bar,baz".split(',')                     # => ["foo", "", "bar", "baz"]
-  # "foo,,bar,baz".split(',', remove_empty: true) # => ["foo", "bar", "baz"]
-  # "foo,bar,baz".split(',', 2)                   # => ["foo", "bar,baz"]
-  # ```
-  def split(separator : Char, limit = nil, *, remove_empty = false)
-    ary = Array(String).new
-    split(separator, limit, remove_empty: remove_empty) do |string|
-      ary << string
+  private macro make_collector_for_last_def(last_def_name, def_name, array_of)
+    {% prev_def = @type.methods.select(&.name.id.==(last_def_name.id)).last %}
+    {% args_no_block = prev_def.args.reject(&.is_a?(Arg::BlockArg)) %}
+
+    {{ @macro_call.doc }}
+    def {{ def_name.id }}({{ args_no_block.def_splat }})
+      ary = Array({{ array_of.id }}).new
+      self.{{ last_def_name.id }}({{ args_no_block.call_splat }}) do |arg|
+        ary << arg
+      end
+      ary
     end
-    ary
   end
+
+  # Makes an array by splitting the string on any amount of ASCII whitespace
+  # characters (and removing that whitespace).
+  #
+  # If *limit* is present, up to *limit* new strings will be created, with the
+  # entire remainder added to the last string.
+  #
+  # ```
+  # old_pond = "
+  #   Old pond
+  #   a frog leaps in
+  #   water's sound
+  # "
+  # old_pond.split    # => ["Old", "pond", "a", "frog", "leaps", "in", "water's", "sound"]
+  # old_pond.split(3) # => ["Old", "pond", "a frog leaps in\n  water's sound\n"]
+  # ```
+  make_collector_for_last_def "each_split", "split", array_of: String
 
   # Splits the string after each character *separator* and yields each part to a block.
   #
@@ -3078,18 +3065,18 @@ class String
   # ```
   # ary = [] of String
   #
-  # "foo,,bar,baz".split(',') { |string| ary << string }
+  # "foo,,bar,baz".each_split(',') { |string| ary << string }
   # ary # => ["foo", "", "bar", "baz"]
   # ary.clear
   #
-  # "foo,,bar,baz".split(',', remove_empty: true) { |string| ary << string }
+  # "foo,,bar,baz".each_split(',', remove_empty: true) { |string| ary << string }
   # ary # => ["foo", "bar", "baz"]
   # ary.clear
   #
-  # "foo,bar,baz".split(',', 2) { |string| ary << string }
+  # "foo,bar,baz".each_split(',', 2) { |string| ary << string }
   # ary # => ["foo", "bar,baz"]
   # ```
-  def split(separator : Char, limit = nil, *, remove_empty = false, &block : String -> _)
+  def each_split(separator : Char, limit = nil, *, remove_empty = false, &block : String -> _)
     if empty?
       yield "" unless remove_empty
       return
@@ -3119,29 +3106,20 @@ class String
     yield String.new(to_unsafe + byte_offset, piece_bytesize)
   end
 
-  # Makes an `Array` by splitting the string on *separator* (and removing instances of *separator*).
+  # Makes an `Array` by splitting the string on the given character *separator*
+  # (and removing that character).
   #
-  # If *limit* is present, the array will be limited to *limit* items and
-  # the final item will contain the remainder of the string.
-  #
-  # If *separator* is an empty string (`""`), the string will be separated into one-character strings.
+  # If *limit* is present, up to *limit* new strings will be created,
+  # with the entire remainder added to the last string.
   #
   # If *remove_empty* is `true`, any empty strings are removed from the result.
   #
   # ```
-  # long_river_name = "Mississippi"
-  # long_river_name.split("ss")                    # => ["Mi", "i", "ippi"]
-  # long_river_name.split("i")                     # => ["M", "ss", "ss", "pp", ""]
-  # long_river_name.split("i", remove_empty: true) # => ["M", "ss", "ss", "pp"]
-  # long_river_name.split("")                      # => ["M", "i", "s", "s", "i", "s", "s", "i", "p", "p", "i"]
+  # "foo,,bar,baz".split(',')                     # => ["foo", "", "bar", "baz"]
+  # "foo,,bar,baz".split(',', remove_empty: true) # => ["foo", "bar", "baz"]
+  # "foo,bar,baz".split(',', 2)                   # => ["foo", "bar,baz"]
   # ```
-  def split(separator : String, limit = nil, *, remove_empty = false)
-    ary = Array(String).new
-    split(separator, limit, remove_empty: remove_empty) do |string|
-      ary << string
-    end
-    ary
-  end
+  make_collector_for_last_def "each_split", "split", array_of: String
 
   # Splits the string after each string *separator* and yields each part to a block.
   #
@@ -3156,22 +3134,22 @@ class String
   # ary = [] of String
   # long_river_name = "Mississippi"
   #
-  # long_river_name.split("ss") { |s| ary << s }
+  # long_river_name.each_split("ss") { |s| ary << s }
   # ary # => ["Mi", "i", "ippi"]
   # ary.clear
   #
-  # long_river_name.split("i") { |s| ary << s }
+  # long_river_name.each_split("i") { |s| ary << s }
   # ary # => ["M", "ss", "ss", "pp", ""]
   # ary.clear
   #
-  # long_river_name.split("i", remove_empty: true) { |s| ary << s }
+  # long_river_name.each_split("i", remove_empty: true) { |s| ary << s }
   # ary # => ["M", "ss", "ss", "pp"]
   # ary.clear
   #
-  # long_river_name.split("") { |s| ary << s }
+  # long_river_name.each_split("") { |s| ary << s }
   # ary # => ["M", "i", "s", "s", "i", "s", "s", "i", "p", "p", "i"]
   # ```
-  def split(separator : String, limit = nil, *, remove_empty = false, &block : String -> _)
+  def each_split(separator : String, limit = nil, *, remove_empty = false, &block : String -> _)
     if empty?
       yield "" unless remove_empty
       return
@@ -3218,33 +3196,23 @@ class String
     yield String.new(to_unsafe + byte_offset, piece_bytesize, piece_size)
   end
 
-  # Splits the string after each regex *separator* and yields each part to a block.
+  # Makes an `Array` by splitting the string on *separator* (and removing instances of *separator*).
   #
   # If *limit* is present, the array will be limited to *limit* items and
   # the final item will contain the remainder of the string.
   #
-  # If *separator* is an empty regex (`//`), the string will be separated into one-character strings.
+  # If *separator* is an empty string (`""`), the string will be separated into one-character strings.
   #
   # If *remove_empty* is `true`, any empty strings are removed from the result.
   #
   # ```
-  # ary = [] of String
   # long_river_name = "Mississippi"
-  #
-  # long_river_name.split(/s+/) { |s| ary << s }
-  # ary # => ["Mi", "i", "ippi"]
-  # ary.clear
-  #
-  # long_river_name.split(//) { |s| ary << s }
-  # ary # => ["M", "i", "s", "s", "i", "s", "s", "i", "p", "p", "i"]
+  # long_river_name.split("ss")                    # => ["Mi", "i", "ippi"]
+  # long_river_name.split("i")                     # => ["M", "ss", "ss", "pp", ""]
+  # long_river_name.split("i", remove_empty: true) # => ["M", "ss", "ss", "pp"]
+  # long_river_name.split("")                      # => ["M", "i", "s", "s", "i", "s", "s", "i", "p", "p", "i"]
   # ```
-  def split(separator : Regex, limit = nil, *, remove_empty = false)
-    ary = Array(String).new
-    split(separator, limit, remove_empty: remove_empty) do |string|
-      ary << string
-    end
-    ary
-  end
+  make_collector_for_last_def "each_split", "split", array_of: String
 
   # Makes an `Array` by splitting the string on *separator* (and removing instances of *separator*).
   #
@@ -3257,10 +3225,10 @@ class String
   #
   # ```
   # long_river_name = "Mississippi"
-  # long_river_name.split(/s+/) # => ["Mi", "i", "ippi"]
-  # long_river_name.split(//)   # => ["M", "i", "s", "s", "i", "s", "s", "i", "p", "p", "i"]
+  # long_river_name.each_split(/s+/) # => ["Mi", "i", "ippi"]
+  # long_river_name.each_split(//)   # => ["M", "i", "s", "s", "i", "s", "s", "i", "p", "p", "i"]
   # ```
-  def split(separator : Regex, limit = nil, *, remove_empty = false, &block : String -> _)
+  def each_split(separator : Regex, limit = nil, *, remove_empty = false, &block : String -> _)
     if empty?
       yield "" unless remove_empty
       return
@@ -3309,6 +3277,28 @@ class String
 
     yield byte_slice(slice_offset) unless remove_empty && slice_offset == bytesize
   end
+
+  # Splits the string after each regex *separator* and yields each part to a block.
+  #
+  # If *limit* is present, the array will be limited to *limit* items and
+  # the final item will contain the remainder of the string.
+  #
+  # If *separator* is an empty regex (`//`), the string will be separated into one-character strings.
+  #
+  # If *remove_empty* is `true`, any empty strings are removed from the result.
+  #
+  # ```
+  # ary = [] of String
+  # long_river_name = "Mississippi"
+  #
+  # long_river_name.split(/s+/) { |s| ary << s }
+  # ary # => ["Mi", "i", "ippi"]
+  # ary.clear
+  #
+  # long_river_name.split(//) { |s| ary << s }
+  # ary # => ["M", "i", "s", "s", "i", "s", "s", "i", "p", "p", "i"]
+  # ```
+  make_collector_for_last_def "each_split", "split", array_of: String
 
   private def split_by_empty_separator(limit, &block : String -> _)
     yielded = 0
